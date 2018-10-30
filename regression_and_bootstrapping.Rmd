@@ -1,0 +1,293 @@
+---
+title: "Regression and Bootstrapping"
+author: "Juan Carlos Castro"
+date: "10/21/2018"
+output: html_document
+fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Question 1 
+
+##### Data-generating equation
+
+```{r 1.a}
+set.seed(7)
+#data 100 observations
+X <- seq(1,5,length.out = 100)
+errors <- rnorm(100)
+Y <- 3*X + errors
+
+#outlier
+X[100] = 20
+Y[100] = -20
+
+#models
+reg_no_outlier <- lm(Y[1:99] ~ X[1:99])
+reg_outlier <- lm(Y ~ X)
+```
+
+##### Regression results without outlier
+``` {r 1b}
+summary(reg_no_outlier)
+```
+
+##### Regression results with outlier
+``` {r 1c}
+summary(reg_outlier)
+```
+
+##### Data visualization
+
+```{r 1de fig1, fig.width = 9, fig.height = 6,fig.cap="Figure 1. Scatterplot of 100 Y values dependent on the single variable X with coefficient 3 and a normal error term. The 100th observation was modified to simulate the effect of an outlier in a univariate regression model. The red line is the regression fitted to the first 99 observations, and the blue line is fitted to the 100 observations.", echo=FALSE}
+plot(X,Y)
+abline(reg_no_outlier, col = 'maroon')
+abline(reg_outlier, col = 'darkblue')
+```
+
+Fig. 1 shows how a single outlier would make a regression model completely inaccurate and could provide us with mistaken results. For this reason, one must be careful when fitting linear models as data that has not been cleaned could include outliers that significantly affect the regression.
+
+### Question 2
+
+Loading the data, isolating control group, creating the linear model, and simulating the parameters (betas and sigmas)
+```{r question2, results = 'hide'}
+
+#loading packages and data
+library(arm)
+library(Matching)
+data("lalonde")
+
+#isolating control group
+lalonde_control <- lalonde[which(lalonde$treat == 0),] 
+
+#linear model
+predict_re78_control <- lm(re78 ~ age + educ + re74 + re75 + educ*re74 +
+                     educ*re75 + age*re74 + age*re75 + re74*re75, data = lalonde_control)
+
+#simulating the parameters
+sim_params_re78 <- sim(predict_re78_control, n.sims=10000)
+
+```
+
+Scenario (a)
+```{r question 2 scenario a}
+
+#age domain
+ages <- c(min(lalonde_control$age):max(lalonde_control$age))
+length(ages)
+
+#calculating the medians
+med_educ <- median(lalonde_control$educ)
+med_re74 <- median(lalonde_control$re74)
+med_re75 <- median(lalonde_control$re75)
+
+set.seed(1)
+
+#simulating the predicted values
+sim_ys_a <- data.frame()
+for (j in 1:39) {
+  xs_a <- c(1,ages[j],med_educ, med_re74, med_re75, med_educ*med_re74,
+                     med_educ*med_re75, ages[j]*med_re74, ages[j]*med_re75, med_re74*med_re75)
+  for (i in 1:10000) {
+    betas_a <- sim_params_re78@coef[i,]
+    sim_ys_a[i,j] <- sum(xs_a*betas_a) + rnorm(1, 0, sim_params_re78@sigma[i])
+  }
+}
+
+```
+
+##### Prediction intervals for scenario (a)
+```{r table a}
+#95% prediction intervals for scenario a
+pred_intervals_a <- apply(sim_ys_a,2,quantile,probs = c(0.025, 0.975))
+pred_intervals_a
+```
+
+##### Visualization
+```{r plot a, fig.width = 8, fig.height = 6,fig.cap="Figure 2. Confidence intervals for re78 predicted for each age in the control group of the lalonde data set. The linear model used age, educ, re74, and re75 as predictors, including some term interactions, and holding educ, re74, and re75 at their medians", echo=FALSE}
+#plotting the intervals  
+plot(x = c(1:100), y = c(1:100), type = "n", xlim = c(17,55), ylim = c(1.25*min(pred_intervals_a[1,]),1.25*max(pred_intervals_a[2,])), 
+     main = "", xlab = "age", ylab = "re78")
+
+for (age in 17:55) {
+  segments(
+    x0 = age,
+    y0 = pred_intervals_a[1, age - 16],
+    x1 = age,
+    y1 = pred_intervals_a[2, age - 16],
+    lwd = 2)
+}
+```
+
+Scenario (b)
+```{r scneario b}
+#calculating the 90% quantiles
+quant90_educ <- quantile(lalonde_control$educ, probs = 0.9) 
+quant90_re74 <- quantile(lalonde_control$re74, probs = 0.9)
+quant90_re75 <- quantile(lalonde_control$re75, probs = 0.9)
+
+```
+
+##### Prediction intervals for scenario (b)
+```{r table b}
+#95% prediction intervals for scenario b
+set.seed(1)
+
+#simulating the predicted values
+sim_ys_b <- data.frame()
+for (j in 1:39) {
+  xs_b <- c(1,ages[j],quant90_educ, quant90_re74, quant90_re75, quant90_educ*quant90_re74,
+                     quant90_educ*quant90_re75, ages[j]*quant90_re74, ages[j]*quant90_re75, quant90_re74*quant90_re75)
+  for (i in 1:10000) {
+    betas_b <- sim_params_re78@coef[i,]
+    sim_ys_b[i,j] <- sum(xs_b*betas_b) + rnorm(1, 0, sim_params_re78@sigma[i])
+  }
+}
+
+pred_intervals_b <- apply(sim_ys_b, 2, quantile, probs = c(0.025, 0.975))
+pred_intervals_b
+```
+
+##### Plot for (b)
+```{r plot b, fig.width = 8, fig.height = 6,fig.cap="Figure 3. Confidence intervals for re78 predicted for each age in the control group of the lalonde data set. The linear model used age, educ, re74, and re75 as predictors, including some term interactions, and holding educ, re74, and re75 at their 90% quantiles", echo=FALSE}
+#plotting the intervals
+plot(x = c(1:100), y = c(1:100), type = "n", xlim = c(17,55), ylim = c(1.25*min(pred_intervals_b[1,]),1.25*max(pred_intervals_b[2,])), 
+     main = "", xlab = "age", ylab = "re78")
+
+for (age in 17:55) {
+  segments(
+    x0 = age,
+    y0 = pred_intervals_b[1, age - 16],
+    x1 = age,
+    y1 = pred_intervals_b[2, age - 16],
+    lwd = 2)
+}
+```
+
+### Question 3
+
+```{r question 3}
+set.seed(3)
+#loading data and packages
+library(foreign)
+nswdata <- read.dta('/Users/juan/Downloads/nsw.dta')
+
+#my bootstrap function. The obs parameter is a matrix in which the observations are each of the rows. B is the number of samples set as n by default
+
+my_bootstrap <- function(obs, B = nrow(obs)) {
+  boot_estimates <- data.frame(cbind(intercept = c(NA),treat = c(NA)))
+  for (i in 1:B) {
+    inds_samp <- sample(1:nrow(obs), nrow(obs), replace = TRUE)
+    one_boot_data <- obs[inds_samp,]
+    boot_estimates[i,] <- lm(re78 ~ treat, data = one_boot_data)$coef
+  }
+  return(boot_estimates)
+}
+
+#bootstrapped estimates
+nsw_bootstrapped <- my_bootstrap(nswdata)
+#bootstrapped 95% confidence interval
+bootstrap_intervals <- apply(nsw_bootstrapped, 2, quantile, probs = c(0.025, 0.975))
+#analytical 95% confidence interval
+analytical_interval <- confint(lm(re78 ~ treat, data = nswdata))
+```
+
+##### Bootstrapped 95% confidence interval
+
+```{r 3a.1}
+t(bootstrap_intervals)
+```
+
+
+##### Analytical 95% confidence interval
+```{r changing names, echo=FALSE}
+row.names(analytical_interval) = c('intercept','treat')
+```
+```{r 3a.2}
+analytical_interval
+```
+
+##### Comparison of the treatment coefficient between the bootstrap and the analytical models
+```{r 3a.3}
+rbind(bootstrap = bootstrap_intervals[,2], analytical = analytical_interval[2,])
+```
+
+##### Data visualization
+```{r hist, fig.width = 8, fig.height = 6,fig.cap="Figure 4. Histogram that shows the distribution of the bootstrapped treatment coefficient from the nsw data", echo=FALSE}
+hist(nsw_bootstrapped[,2], main = '', xlab = 'Estimated treatment coefficient', col="darkgrey")
+```
+
+We can see how the bootstrap technique provided us with approximations close to the real confidence intervals (which are also estimates and there's uncertainty to them), demonstrating the power of bootstrapping. In the next question we will use another metric to evaluate the bootstrap performance.
+
+### Question 4
+
+Function R_squared
+```{r question4}
+R_squared <- function (pred_ys, real_ys) {
+  SSE = sum((pred_ys-real_ys)^2)
+  SST = sum((real_ys-mean(real_ys))^2)
+  return(1-SSE/SST)
+}
+```
+
+Example using the model from question 3
+```{r q4example}
+
+#predicted re78 by treatment
+linmod <- lm(re78 ~ treat, data = nswdata)
+pred_ys_re78 <- predict(linmod)
+
+#predicted re78 by treatment using the means of the bootstrapped coefficients calculated in (3)
+intercept_boot <- mean(nsw_bootstrapped$intercept)
+treat_boot <- mean(nsw_bootstrapped$treat)
+pred_ys_re78_bootstrap <- nswdata$treat*treat_boot + intercept_boot
+```
+
+R squared of the original linear regression 
+```{r rsqrd linmod}
+R_squared(pred_ys_re78, nswdata$re78)
+```
+
+R squared using the means of the bootstrapped coefficients 
+```{r rsqrd boot}
+R_squared(pred_ys_re78_bootstrap, nswdata$re78)
+```
+
+R squared extracted from the linear model showing the function works
+```{r rsqrd comparison}
+summary(linmod)$r.squared
+```
+
+We can see that the model using the means of the bootstrapped coefficients performs very similar to the original linear model when tested using the R squared value
+
+### Question 5
+
+``` {r question 5}
+
+#logistic regression model
+logit_nsw <- glm(treat ~ age + education + black + hispanic + married + nodegree + re75, family = "binomial", data = nswdata)
+
+#estimated probabilities
+estimated_probs <- predict(logit_nsw, type = "response")
+estimated_probs_df <- data.frame(nswdata$treat,estimated_probs)
+
+#getting indexes that will allow separation between treatment and control group
+treat_inds <- which(estimated_probs_df$nswdata.treat == 1)
+```
+
+##### Visualizations
+```{r hist 1, fig.width = 8, fig.height = 6,fig.cap="Figure 5. Histogram that shows the distribution of the treatment group's estimated probabilities of being predicted as part of the treatment group. The probabilities are estimated by a logistic regression model using every parameter as predictor exlcuding re78 and no interaction terms", echo=FALSE}
+hist(estimated_probs_df[treat_inds,2], main = 'Treatment group', xlab = "Estimated probabilities", col = "maroon", xlim = c(0.3,0.60))
+```
+
+``` {r hist 2, fig.width = 8, fig.height = 6,fig.cap="Figure 6. Histogram that shows the distribution of the control group's estimated probabilities of being predicted as part of the treatment group. The probabilities are estimated by a logistic regression model using every parameter as predictor exlcuding re78 and no interaction terms", echo=FALSE}
+hist(estimated_probs_df[-treat_inds,2], main = 'Control group', xlab = "Estimated probabilities", col = "darkblue", xlim = c(0.3,0.60))
+```
+
+We can see how both the control group and the treatment group show similar distributions for the estimated probability. This means that the logistic regression is not effective at separating the control and treatment group. This is an intuitive result as one would expect that treatment is assigned randomly to the members of our sample. A model that would effectively predict belonging to the treatment and control group would tell us that there was some kind of bias when treatment was assigned. 
+
+#### Link to gist with code:
+https://gist.github.com/jccf12/7ba5f8ca159da4b4f16b95fb8818e416

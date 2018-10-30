@@ -1,0 +1,10 @@
+install.packages('ISLR')
+library(ISLR)
+set.seed(1)
+train=sample(392,192)
+lm.fit = lm(mpg ~ horsepower, data = Auto, subset = train)
+attach(Auto)
+mean((mpg - predict(lm.fit, Auto))[-train]^2)
+lm.fit2 = lm(mpg ~ poly(horsepower, 2), data = Auto, subset = train) 
+mean((mpg - predict(lm.fit2,Auto))[-train]^2)
+lm.fit3

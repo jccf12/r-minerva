@@ -1,0 +1,10 @@
+install.packages('tree')
+library(tree)
+library(ISLR)
+attach(Carseats)
+High=ifelse(Sales <=8,"No","Yes ")
+Carseats = data.frame(Carseats ,High)
+tree.carseats =tree(High~.-Sales , Carseats ,subset=train)
+tree.pred=predict(tree.carseats ,Carseats.test ,type="class")
+table(tree.pred ,High.test)
+
